@@ -15,10 +15,23 @@ interface FunctionEntity {
   functionDeclaration: FunctionDeclaration;
 }
 
+export enum EventNameEnum {
+  EvalSourceFile,
+  EvalStatementList,
+  EvalStatement,
+  EvalVariableDeclaration,
+  EvalFunctionBody,
+  EvalFunctionDeclaration,
+}
+
+export class InterpreterEvent {
+  constructor(public eventName: EventNameEnum, public env: Env) { }
+}
+
 export class Interpreter {
   constructor(private ast: AST) { }
 
-  public eval() {
+  public *eval() {
     // 初始化 global 环境
     const env: Env = [];
     const frame = new Map<string, any>();
@@ -26,37 +39,45 @@ export class Interpreter {
 
     // 开始求值
     const { SourceFile } = this.ast;
-    return this.evalSourceFile(env, SourceFile);
+    return yield* this.evalSourceFile(env, SourceFile);
   }
 
-  private evalSourceFile(env: Env, sourceFile: SourceFile) {
+  private *evalSourceFile(env: Env, sourceFile: SourceFile) {
+    yield new InterpreterEvent(EventNameEnum.EvalSourceFile, env);
+
     const { StatementList } = sourceFile;
-    const statementValues = this.evalStatementList(env, StatementList);
+    const statementValues = yield* this.evalStatementList(env, StatementList);
 
     // 只返回最后一个值
     return statementValues[statementValues.length - 1];
   }
 
-  private evalStatementList(env: Env, statementList: Statement[]) {
+  private *evalStatementList(env: Env, statementList: Statement[]) {
+    yield new InterpreterEvent(EventNameEnum.EvalStatementList, env);
+
     const statementValues = [];
     for (let i = 0; i < statementList.length; i++) {
       const statement = statementList[i];
-      const statementValue = this.evalStatement(env, statement);
+      const statementValue = yield* this.evalStatement(env, statement);
       statementValues.push(statementValue);
     }
 
     return statementValues;
   }
 
-  private evalStatement(env: Env, statement: Statement) {
+  private *evalStatement(env: Env, statement: Statement) {
+    yield new InterpreterEvent(EventNameEnum.EvalStatement, env);
+
     const isVariableDeclaration = (statement as VariableDeclaration).VariableDeclaration != null;
     if (isVariableDeclaration) {
-      return this.evalVariableDeclaration(env, statement as VariableDeclaration);
+      return yield* this.evalVariableDeclaration(env, statement as VariableDeclaration);
     }
-    return this.evalFunctionDeclaration(env, statement as FunctionDeclaration);
+    return yield* this.evalFunctionDeclaration(env, statement as FunctionDeclaration);
   }
 
-  private evalVariableDeclaration(env: Env, statement: VariableDeclaration) {
+  private *evalVariableDeclaration(env: Env, statement: VariableDeclaration) {
+    yield new InterpreterEvent(EventNameEnum.EvalVariableDeclaration, env);
+
     const {
       VariableDeclaration: {
         name: variableDeclarationName,
@@ -116,7 +137,7 @@ export class Interpreter {
     this.addNewFrameToEnv(lexicalEnv, parameterName, argumentValue);
 
     // 在扩充后的词法环境中，求值函数体
-    const functionReturnValue = this.evalFunctionBody(lexicalEnv, functionDeclarationBody);
+    const functionReturnValue = yield* this.evalFunctionBody(lexicalEnv, functionDeclarationBody);
     // 退出后把帧删掉，把词法环境复原
     this.removeLastestFrameFromEnv(lexicalEnv);
 
@@ -126,14 +147,16 @@ export class Interpreter {
     return functionReturnValue;
   }
 
-  private evalFunctionBody(env: Env, functionBody: FunctionBody) {
+  private *evalFunctionBody(env: Env, functionBody: FunctionBody) {
+    yield new InterpreterEvent(EventNameEnum.EvalFunctionBody, env);
+
     const {
       StatementList,
       ReturnStatement,
     } = functionBody;
 
     // 只返回 return 的值，statementValues 会被丢弃
-    const statementValues = this.evalStatementList(env, StatementList);
+    const statementValues = yield* this.evalStatementList(env, StatementList);
 
     // 求值 ReturnStatement，是一个 Token 或者 加法表达式
     const isToken = ReturnStatement instanceof Token;
@@ -168,7 +191,7 @@ export class Interpreter {
       isFound: isFoundRight,
       value: rightValue,
     } = this.findValueFromEnv(env, rightName);
-    if (!isFoundLeft || !isFoundLeft) {  // 有一个没找到就报错
+    if (!isFoundLeft || !isFoundRight) {  // 有一个没找到就报错
       throw new Error(`没找到加法表达式的值`);
     }
     return (+leftValue) + (+rightValue);
@@ -215,7 +238,9 @@ export class Interpreter {
     }
   }
 
-  private evalFunctionDeclaration(env: Env, statement: FunctionDeclaration) {
+  private *evalFunctionDeclaration(env: Env, statement: FunctionDeclaration) {
+    yield new InterpreterEvent(EventNameEnum.EvalFunctionDeclaration, env);
+
     const {
       FunctionDeclaration: {
         name,
