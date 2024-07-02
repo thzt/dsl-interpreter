@@ -2,6 +2,9 @@ import * as fs from "fs";
 import * as path from "path";
 
 import { Parser } from "../../dsl-parser/src/index";
+import type { AST } from "../../dsl-parser/src/index";
+
+import { Interpreter } from "../src/index";
 
 describe("test case", () => {
   const filePath = path.resolve("./test/demo.dsl");
@@ -9,9 +12,12 @@ describe("test case", () => {
 
   describe("case 1", () => {
     it("result 1", () => {
-      debugger;
       const parser = new Parser(code);
-      const ast = parser.parse();
+      const ast: AST = parser.parse();
+
+      debugger;
+      const interpreter = new Interpreter(ast);
+      const value = interpreter.eval();
       debugger;
     });
   });

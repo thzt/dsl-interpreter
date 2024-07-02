@@ -9,4 +9,5 @@ f(x){
   return g
 }
 
-let c = g(a)
+let c = f(a)
+let d = c(b)
