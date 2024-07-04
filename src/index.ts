@@ -4,6 +4,8 @@ import type {
   VariableDeclaration, FunctionDeclaration,
   FunctionBody,
   PlusExpression,
+  Literal,
+  CallExpression,
 } from '../../dsl-parser/src/index';
 import { Token } from '../../dsl-parser/src/token';
 
@@ -80,18 +82,17 @@ export class Interpreter {
 
     const {
       VariableDeclaration: {
-        name: variableDeclarationName,
-        value: variableDeclarationValue,
+        VariableName: variableDeclarationName,
+        VariableValue: variableDeclarationValue,
       },
     } = statement;
 
     // value 可以是 token（单纯赋值） 也可以是 CallExpression
-    const isToken = (variableDeclarationValue instanceof Token);
 
     // 1. 单纯赋值
-    if (isToken) {
+    if ((variableDeclarationValue as Literal).Literal != null) {  // 单纯赋值
       const variableName = variableDeclarationName.source;
-      const variableValue = +variableDeclarationValue.source;  // 当前只支持 数字
+      const variableValue = +(variableDeclarationValue as Literal).Literal.source;  // 当前只支持 数字
 
       this.addBindingToLastestFrame(env, variableName, variableValue);
       return variableValue;
@@ -100,10 +101,10 @@ export class Interpreter {
     // 2. 函数调用再赋值 CallExpression
     const {
       CallExpression: {
-        name: functionCallName,
-        argument: functionCallArgument,
+        FunctionName: functionCallName,
+        FunctionArgument: functionCallArgument,
       },
-    } = variableDeclarationValue;
+    } = variableDeclarationValue as CallExpression;
     const functionName = functionCallName.source;
     const { isFound, value: functionEntity } = this.findValueFromEnv(env, functionName);
     if (!isFound) {
@@ -115,8 +116,8 @@ export class Interpreter {
       lexicalEnv,
       functionDeclaration: {
         FunctionDeclaration: {
-          parameter: functionDeclarationParameter,
-          body: functionDeclarationBody,
+          FunctionParameter: functionDeclarationParameter,
+          FunctionBody: functionDeclarationBody,
         }
       }
     } = functionEntity as FunctionEntity;
@@ -152,16 +153,19 @@ export class Interpreter {
 
     const {
       StatementList,
-      ReturnStatement,
+      ReturnStatement: {
+        ReturnValue,
+      },
     } = functionBody;
 
     // 只返回 return 的值，statementValues 会被丢弃
     const statementValues = yield* this.evalStatementList(env, StatementList);
 
-    // 求值 ReturnStatement，是一个 Token 或者 加法表达式
-    const isToken = ReturnStatement instanceof Token;
-    if (isToken) {
-      const key = ReturnStatement.source;
+    // 求值 ReturnValue，是一个 Literal 或者 加法表达式
+
+    // 1. Literal
+    if ((ReturnValue as Literal).Literal != null) {
+      const key = (ReturnValue as Literal).Literal.source;
       const {
         isFound,
         value,
@@ -172,13 +176,13 @@ export class Interpreter {
       return value;
     }
 
-    // 计算加法
+    // 2. 加法表达式
     const {
       PlusExpression: {
-        left,
-        right,
+        Left: left,
+        Right: right,
       }
-    } = ReturnStatement as PlusExpression;
+    } = ReturnValue as PlusExpression;
 
     // TODO: 这里应该递归求值一下表达式
     const leftName = left.source;
@@ -243,7 +247,7 @@ export class Interpreter {
 
     const {
       FunctionDeclaration: {
-        name,
+        FunctionName: name,
       },
     } = statement;
 

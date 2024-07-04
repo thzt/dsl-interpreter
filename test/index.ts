@@ -1,12 +1,14 @@
 import * as fs from "fs";
 import * as path from "path";
+import { EventEmitter } from "events";
+import assert from "assert";
 
-import { Parser } from "../../dsl-parser/src/index";
-import type { AST } from "../../dsl-parser/src/index";
+import { Parser } from "../../dsl-parser";
+import type { AST } from "../../dsl-parser";
 
 import { Interpreter, InterpreterEvent } from "../src/index";
 import { EventNameEnum } from "../src/index";
-import { EventEmitter } from "events";
+
 
 class Runtime extends EventEmitter {
   private generator: Generator;
@@ -50,6 +52,27 @@ describe("test case", () => {
   const code = fs.readFileSync(filePath, "utf-8");
 
   describe("case 1", () => {
+    it("result 1", async () => {
+      const parser = new Parser(code);
+      const ast: AST = parser.parse();
+
+      debugger;
+      const interpreter = new Interpreter(ast);
+      const generator = interpreter.eval();
+
+      while (true) {
+        const { done, value } = generator.next();
+        if (done) {
+          assert(value === 5);
+          break;
+        }
+      }
+
+      debugger;
+    });
+  });
+
+  describe.skip("case 2", () => {
     it("result 1", async () => {
       const parser = new Parser(code);
       const ast: AST = parser.parse();
