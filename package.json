@@ -4,7 +4,7 @@
   "description": "",
   "main": "out/index.js",
   "scripts": {
-    "watch": "trash out && tsc -w -p .",
+    "watch": "rm -rf out && tsc -w -p .",
     "test": "mocha --require ts-node/register test/**/*.ts -timeout 100000",
     "debug:test": "node --inspect=5858 node_modules/.bin/mocha --require ts-node/register test/**/*.ts -timeout 100000"
   },
@@ -15,7 +15,6 @@
     "@types/mocha": "^10.0.7",
     "@types/node": "^20.14.9",
     "mocha": "^10.5.2",
-    "trash-cli": "^5.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.2"
   }

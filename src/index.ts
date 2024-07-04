@@ -6,8 +6,7 @@ import type {
   PlusExpression,
   Literal,
   CallExpression,
-} from '../../dsl-parser/src/index';
-import { Token } from '../../dsl-parser/src/token';
+} from '../../dsl-parser';
 
 type Frame = Map<string, any>;
 type Env = Frame[];
@@ -18,16 +17,17 @@ interface FunctionEntity {
 }
 
 export enum EventNameEnum {
-  EvalSourceFile,
-  EvalStatementList,
-  EvalStatement,
-  EvalVariableDeclaration,
-  EvalFunctionBody,
-  EvalFunctionDeclaration,
+  Start,
+  StartEvalSourceFile,
+  StartEvalStatementList,
+  StartEvalStatement,
+  StartEvalVariableDeclaration,
+  StartEvalFunctionBody,
+  StartEvalFunctionDeclaration,
 }
 
 export class InterpreterEvent {
-  constructor(public eventName: EventNameEnum, public env: Env) { }
+  constructor(public eventName: EventNameEnum, public env: Env, public pos?: number) { }
 }
 
 export class Interpreter {
@@ -39,13 +39,15 @@ export class Interpreter {
     const frame = new Map<string, any>();
     env.push(frame);
 
+    yield new InterpreterEvent(EventNameEnum.Start, env, 0);
+
     // 开始求值
     const { SourceFile } = this.ast;
     return yield* this.evalSourceFile(env, SourceFile);
   }
 
   private *evalSourceFile(env: Env, sourceFile: SourceFile) {
-    yield new InterpreterEvent(EventNameEnum.EvalSourceFile, env);
+    yield new InterpreterEvent(EventNameEnum.StartEvalSourceFile, env, sourceFile.pos);
 
     const { StatementList } = sourceFile;
     const statementValues = yield* this.evalStatementList(env, StatementList);
@@ -55,7 +57,7 @@ export class Interpreter {
   }
 
   private *evalStatementList(env: Env, statementList: Statement[]) {
-    yield new InterpreterEvent(EventNameEnum.EvalStatementList, env);
+    yield new InterpreterEvent(EventNameEnum.StartEvalStatementList, env);
 
     const statementValues = [];
     for (let i = 0; i < statementList.length; i++) {
@@ -68,7 +70,7 @@ export class Interpreter {
   }
 
   private *evalStatement(env: Env, statement: Statement) {
-    yield new InterpreterEvent(EventNameEnum.EvalStatement, env);
+    yield new InterpreterEvent(EventNameEnum.StartEvalStatement, env);
 
     const isVariableDeclaration = (statement as VariableDeclaration).VariableDeclaration != null;
     if (isVariableDeclaration) {
@@ -78,14 +80,14 @@ export class Interpreter {
   }
 
   private *evalVariableDeclaration(env: Env, statement: VariableDeclaration) {
-    yield new InterpreterEvent(EventNameEnum.EvalVariableDeclaration, env);
-
     const {
       VariableDeclaration: {
         VariableName: variableDeclarationName,
         VariableValue: variableDeclarationValue,
+        offset,
       },
     } = statement;
+    yield new InterpreterEvent(EventNameEnum.StartEvalVariableDeclaration, env, offset.pos);
 
     // value 可以是 token（单纯赋值） 也可以是 CallExpression
 
@@ -149,7 +151,7 @@ export class Interpreter {
   }
 
   private *evalFunctionBody(env: Env, functionBody: FunctionBody) {
-    yield new InterpreterEvent(EventNameEnum.EvalFunctionBody, env);
+    yield new InterpreterEvent(EventNameEnum.StartEvalFunctionBody, env);
 
     const {
       StatementList,
@@ -243,13 +245,13 @@ export class Interpreter {
   }
 
   private *evalFunctionDeclaration(env: Env, statement: FunctionDeclaration) {
-    yield new InterpreterEvent(EventNameEnum.EvalFunctionDeclaration, env);
-
     const {
       FunctionDeclaration: {
         FunctionName: name,
+        offset,
       },
     } = statement;
+    yield new InterpreterEvent(EventNameEnum.StartEvalFunctionDeclaration, env, offset.pos);
 
     const functionName = name.source;
     const functionEntity: FunctionEntity = {
