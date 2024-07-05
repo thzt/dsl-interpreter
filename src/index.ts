@@ -24,6 +24,11 @@ export enum EventNameEnum {
   StartEvalVariableDeclaration,
   StartEvalFunctionBody,
   StartEvalFunctionDeclaration,
+  StartEvalReturnValue,
+  StartCallExpression,
+
+  EndEvalSourceFile,
+  EndEvalFunctionBody,
 }
 
 export class InterpreterEvent {
@@ -42,12 +47,15 @@ export class Interpreter {
     yield new InterpreterEvent(EventNameEnum.Start, env, 0);
 
     // 开始求值
-    const { SourceFile } = this.ast;
-    return yield* this.evalSourceFile(env, SourceFile);
+    const { SourceFile, offset } = this.ast;
+    const sourceFileValue = yield* this.evalSourceFile(env, SourceFile);
+
+    yield new InterpreterEvent(EventNameEnum.EndEvalSourceFile, env, offset.end);
+    return sourceFileValue;
   }
 
   private *evalSourceFile(env: Env, sourceFile: SourceFile) {
-    yield new InterpreterEvent(EventNameEnum.StartEvalSourceFile, env, sourceFile.pos);
+    yield new InterpreterEvent(EventNameEnum.StartEvalSourceFile, env, sourceFile.offset.pos);
 
     const { StatementList } = sourceFile;
     const statementValues = yield* this.evalStatementList(env, StatementList);
@@ -105,8 +113,11 @@ export class Interpreter {
       CallExpression: {
         FunctionName: functionCallName,
         FunctionArgument: functionCallArgument,
+        offset: callExpressionOffset,
       },
     } = variableDeclarationValue as CallExpression;
+    yield new InterpreterEvent(EventNameEnum.StartCallExpression, env, callExpressionOffset.pos);
+
     const functionName = functionCallName.source;
     const { isFound, value: functionEntity } = this.findValueFromEnv(env, functionName);
     if (!isFound) {
@@ -140,7 +151,9 @@ export class Interpreter {
     this.addNewFrameToEnv(lexicalEnv, parameterName, argumentValue);
 
     // 在扩充后的词法环境中，求值函数体
-    const functionReturnValue = yield* this.evalFunctionBody(lexicalEnv, functionDeclarationBody);
+    const functionReturnValue = yield* this.evalFunctionBody(lexicalEnv, functionDeclarationBody);  
+    yield new InterpreterEvent(EventNameEnum.EndEvalFunctionBody, lexicalEnv, functionDeclarationBody.offset.end);
+
     // 退出后把帧删掉，把词法环境复原
     this.removeLastestFrameFromEnv(lexicalEnv);
 
@@ -151,14 +164,14 @@ export class Interpreter {
   }
 
   private *evalFunctionBody(env: Env, functionBody: FunctionBody) {
-    yield new InterpreterEvent(EventNameEnum.StartEvalFunctionBody, env);
-
     const {
       StatementList,
       ReturnStatement: {
         ReturnValue,
       },
+      offset,
     } = functionBody;
+    yield new InterpreterEvent(EventNameEnum.StartEvalFunctionBody, env, offset.pos);
 
     // 只返回 return 的值，statementValues 会被丢弃
     const statementValues = yield* this.evalStatementList(env, StatementList);
@@ -167,6 +180,8 @@ export class Interpreter {
 
     // 1. Literal
     if ((ReturnValue as Literal).Literal != null) {
+      yield new InterpreterEvent(EventNameEnum.StartEvalReturnValue, env, ReturnValue.offset.pos);
+
       const key = (ReturnValue as Literal).Literal.source;
       const {
         isFound,
@@ -183,8 +198,10 @@ export class Interpreter {
       PlusExpression: {
         Left: left,
         Right: right,
+        offset: plusExpressionOffset,
       }
     } = ReturnValue as PlusExpression;
+    yield new InterpreterEvent(EventNameEnum.StartEvalReturnValue, env, plusExpressionOffset.pos);
 
     // TODO: 这里应该递归求值一下表达式
     const leftName = left.source;
